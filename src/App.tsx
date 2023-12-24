@@ -14,32 +14,32 @@ const darkTheme = createTheme({
 function App() {
     const [question, setQuestion] = useState<string>();
     const [answer, setAnswer] = useState<string>();
+    const [loading, setLoading] = useState(false);
 
-    let loading = false;
-
-    const handleSubmit = (e: FormEvent) => {
+    const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
 
         console.log(question);
 
         if (question) {
-            loading = true;
+            setLoading(true);
+
+            console.log(`set loading: `, true);
+
             callAPI(question);
         } else {
             setAnswer('Question must be entered.');
         }
 
         console.log(answer);
-
-        // TODO send to openai: ask(question)
     };
 
     const callAPI = (question: string) => {
         fetch(`http://localhost:9000/openApi?question=${question}`)
             .then((res) => res.text())
             .then((answer) => {
-                loading = false;
-                console.log('Answer: ', answer);
+                setLoading(false);
+
                 return setAnswer(answer);
             });
     };
@@ -72,9 +72,10 @@ function App() {
                     </form>
                     {loading ? (
                         <CircularProgress
-                            color="secondary" // Set the color (primary, secondary, or custom)
-                            size={50} // Set the size (in pixels)
-                            thickness={5} // Set the thickness of the circle
+                            color="secondary"
+                            size={40}
+                            thickness={5}
+                            style={{ marginTop: 100 }}
                         />
                     ) : (
                         <p
