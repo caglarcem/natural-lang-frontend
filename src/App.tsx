@@ -1,4 +1,4 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useState, useEffect } from 'react';
 import './App.css';
 import { TextField, Button } from '@mui/material';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
@@ -11,36 +11,66 @@ const darkTheme = createTheme({
     },
 });
 
+interface Language {
+    code: string;
+    name: string;
+}
+
 function App() {
-    const [question, setQuestion] = useState<string>();
-    const [answer, setAnswer] = useState<string>();
+    const [incomingSentence, setIncomingSentence] = useState<string>();
+    const [languageCode, setLanguageCode] = useState<string>();
+    const [translation, setTranslation] = useState<string>();
+    const [languages, setLanguages] = useState<Language[]>();
     const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        callSupportedLanguagesAPI();
+    }, []);
+
+    useEffect(() => {}, [languages]);
 
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
 
-        console.log(question);
+        console.log(incomingSentence);
 
-        if (question) {
+        console.log(languageCode);
+
+        if (incomingSentence) {
             setLoading(true);
 
-            console.log(`set loading: `, true);
-
-            callAPI(question);
+            callTranslateAnswerAPI(incomingSentence, languageCode ?? 'TR');
         } else {
-            setAnswer('Question must be entered.');
+            setTranslation('Question must be entered.');
         }
 
-        console.log(answer);
+        console.log(translation);
     };
 
-    const callAPI = (question: string) => {
-        fetch(`http://localhost:9000/openApi?question=${question}`)
-            .then((res) => res.text())
-            .then((answer) => {
+    const callSupportedLanguagesAPI = () => {
+        fetch(`http://localhost:9000/translation/languages`)
+            .then((res) => res.json())
+            .then((languages: Language[]) => {
                 setLoading(false);
 
-                return setAnswer(answer);
+                console.log('Languages: ', languages);
+
+                setLanguages(languages);
+            });
+    };
+
+    const callTranslateAnswerAPI = (
+        incomingSentence: string,
+        languageCode?: string
+    ) => {
+        fetch(
+            `http://localhost:9000/translation/answer?question=${incomingSentence}&languageCode=${languageCode}`
+        )
+            .then((res) => res.text())
+            .then((translation) => {
+                setLoading(false);
+
+                return setTranslation(translation);
             });
     };
 
@@ -49,7 +79,7 @@ function App() {
             <CssBaseline />
             <div className="App">
                 <header className="App-header">
-                    <p>Ask a question about Great Gatsby.</p>
+                    <p>Select languages and enter text to translate.</p>
                     <form
                         onSubmit={(e) => {
                             handleSubmit(e);
@@ -57,9 +87,11 @@ function App() {
                     >
                         <TextField
                             variant="standard"
-                            label="My question is..."
+                            label="English sentence..."
                             style={{ height: 30, width: 400 }}
-                            onChange={(e) => setQuestion(e.target.value)}
+                            onChange={(e) =>
+                                setIncomingSentence(e.target.value)
+                            }
                         />
                         <br />
                         <Button
@@ -67,7 +99,7 @@ function App() {
                             color="primary"
                             type="submit"
                         >
-                            Send
+                            Translate
                         </Button>
                     </form>
                     {loading ? (
@@ -78,15 +110,26 @@ function App() {
                             style={{ marginTop: 100 }}
                         />
                     ) : (
-                        <p
-                            style={{
-                                fontSize: 17,
-                                marginTop: 100,
-                                maxWidth: 800,
-                            }}
-                        >
-                            {answer}
-                        </p>
+                        <>
+                            <p
+                                style={{
+                                    fontSize: 17,
+                                    marginTop: 100,
+                                    maxWidth: 800,
+                                }}
+                            >
+                                {translation}
+                            </p>
+                            <p
+                                style={{
+                                    fontSize: 17,
+                                    marginTop: 100,
+                                    maxWidth: 800,
+                                }}
+                            >
+                                {languageCode}
+                            </p>
+                        </>
                     )}
                 </header>
             </div>
