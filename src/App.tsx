@@ -1,6 +1,6 @@
 import { FormEvent, useState, useEffect } from 'react';
 import './App.css';
-import { TextField, Button } from '@mui/material';
+import { TextField, Button, Stack, Autocomplete, Box } from '@mui/material';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -18,13 +18,33 @@ interface Language {
 
 function App() {
     const [incomingSentence, setIncomingSentence] = useState<string>();
-    const [languageCode, setLanguageCode] = useState<string>();
+    const [fromLanguageCode, setFromLanguageCode] = useState<string>();
+    const [toLanguageCode, setToLanguageCode] = useState<string>();
     const [translation, setTranslation] = useState<string>();
-    const [languages, setLanguages] = useState<Language[]>();
+    const [languages, setLanguages] = useState<Language[]>([]);
     const [loading, setLoading] = useState(false);
 
+    const defaultPropsFromLanguage = {
+        options: languages || [],
+        getOptionLabel: (option: Language) => option.name,
+    };
+
+    const defaultPropsToLanguage = {
+        options: languages || [],
+        getOptionLabel: (option: Language) => option.name,
+    };
+
     useEffect(() => {
-        callSupportedLanguagesAPI();
+        const languages = localStorage.getItem('cachedLanguages');
+
+        if (languages) {
+            console.log('Fetch data from cache');
+            setSupportedLanguagesFromCache(languages);
+        } else {
+            console.log('Fetch data from API');
+            // Fetch data from API
+            setSupportedLanguagesFromAPI();
+        }
     }, []);
 
     useEffect(() => {}, [languages]);
@@ -34,12 +54,14 @@ function App() {
 
         console.log(incomingSentence);
 
-        console.log(languageCode);
-
         if (incomingSentence) {
             setLoading(true);
 
-            callTranslateAnswerAPI(incomingSentence, languageCode ?? 'TR');
+            callTranslateAPI(
+                incomingSentence,
+                fromLanguageCode,
+                toLanguageCode
+            );
         } else {
             setTranslation('Question must be entered.');
         }
@@ -47,24 +69,37 @@ function App() {
         console.log(translation);
     };
 
-    const callSupportedLanguagesAPI = () => {
+    const setSupportedLanguagesFromCache = (cachedLanguages: string) => {
+        setLanguages(JSON.parse(cachedLanguages));
+
+        setLoading(false);
+    };
+
+    const setSupportedLanguagesFromAPI = () => {
         fetch(`http://localhost:9000/translation/languages`)
             .then((res) => res.json())
             .then((languages: Language[]) => {
-                setLoading(false);
-
                 console.log('Languages: ', languages);
 
+                // Cache the result in localStorage
+                localStorage.setItem(
+                    'cachedLanguages',
+                    JSON.stringify(languages)
+                );
+
                 setLanguages(languages);
+
+                setLoading(false);
             });
     };
 
-    const callTranslateAnswerAPI = (
+    const callTranslateAPI = (
         incomingSentence: string,
-        languageCode?: string
+        fromLanguageCode?: string,
+        toLanguageCode?: string
     ) => {
         fetch(
-            `http://localhost:9000/translation/answer?question=${incomingSentence}&languageCode=${languageCode}`
+            `http://localhost:9000/translation/answer?incomingSentence=${incomingSentence}&fromLanguageCode=${fromLanguageCode}&toLanguageCode=${toLanguageCode}`
         )
             .then((res) => res.text())
             .then((translation) => {
@@ -79,58 +114,105 @@ function App() {
             <CssBaseline />
             <div className="App">
                 <header className="App-header">
-                    <p>Select languages and enter text to translate.</p>
                     <form
                         onSubmit={(e) => {
                             handleSubmit(e);
                         }}
                     >
-                        <TextField
-                            variant="standard"
-                            label="English sentence..."
-                            style={{ height: 30, width: 400 }}
-                            onChange={(e) =>
-                                setIncomingSentence(e.target.value)
-                            }
-                        />
-                        <br />
-                        <Button
-                            style={{ marginTop: 50 }}
-                            color="primary"
-                            type="submit"
+                        <Box
+                            sx={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                width: 500,
+                                marginTop: 10,
+                            }}
                         >
-                            Translate
-                        </Button>
+                            <div>
+                                Select languages and enter text to translate.
+                            </div>
+                            <Box
+                                sx={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    marginTop: 5,
+                                }}
+                            >
+                                <Autocomplete
+                                    sx={{ width: '40%' }}
+                                    {...defaultPropsFromLanguage}
+                                    id="from-language"
+                                    includeInputInList
+                                    renderInput={(params) => (
+                                        <TextField
+                                            {...params}
+                                            label="From language"
+                                            variant="standard"
+                                        />
+                                    )}
+                                    onChange={(event, newValue) => {
+                                        setFromLanguageCode(newValue?.code);
+                                    }}
+                                />
+                                <Autocomplete
+                                    sx={{ width: '40%' }}
+                                    {...defaultPropsToLanguage}
+                                    id="to-language"
+                                    includeInputInList
+                                    renderInput={(params) => (
+                                        <TextField
+                                            {...params}
+                                            label="To language"
+                                            variant="standard"
+                                        />
+                                    )}
+                                    onChange={(event, newValue) => {
+                                        setToLanguageCode(newValue?.code);
+                                    }}
+                                />
+                            </Box>
+                            <TextField
+                                variant="standard"
+                                label="Sentence to translate..."
+                                style={{
+                                    height: 30,
+                                    width: 500,
+                                    marginTop: 40,
+                                }}
+                                onChange={(e) =>
+                                    setIncomingSentence(e.target.value)
+                                }
+                            />
+                            <br />
+                            <Button
+                                style={{ marginTop: 50 }}
+                                color="primary"
+                                type="submit"
+                            >
+                                Translate
+                            </Button>
+
+                            {loading ? (
+                                <CircularProgress
+                                    color="secondary"
+                                    size={40}
+                                    thickness={5}
+                                    style={{ marginTop: 100 }}
+                                />
+                            ) : (
+                                <>
+                                    <p
+                                        style={{
+                                            fontSize: 17,
+                                            marginTop: 100,
+                                            maxWidth: 800,
+                                        }}
+                                    >
+                                        {translation}
+                                    </p>
+                                </>
+                            )}
+                        </Box>
                     </form>
-                    {loading ? (
-                        <CircularProgress
-                            color="secondary"
-                            size={40}
-                            thickness={5}
-                            style={{ marginTop: 100 }}
-                        />
-                    ) : (
-                        <>
-                            <p
-                                style={{
-                                    fontSize: 17,
-                                    marginTop: 100,
-                                    maxWidth: 800,
-                                }}
-                            >
-                                {translation}
-                            </p>
-                            <p
-                                style={{
-                                    fontSize: 17,
-                                    marginTop: 100,
-                                    maxWidth: 800,
-                                }}
-                            >
-                                {languageCode}
-                            </p>
-                        </>
-                    )}
                 </header>
             </div>
         </ThemeProvider>
