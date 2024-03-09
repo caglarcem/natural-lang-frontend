@@ -1,6 +1,6 @@
 import { FormEvent, useState, useEffect } from 'react';
 import './App.css';
-import { TextField, Button, Stack, Autocomplete, Box } from '@mui/material';
+import { TextField, Button, Autocomplete, Box } from '@mui/material';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -63,7 +63,7 @@ function App() {
                 toLanguageCode
             );
         } else {
-            setTranslation('Question must be entered.');
+            setTranslation('Sentence must be entered.');
         }
 
         console.log(translation);
@@ -99,7 +99,7 @@ function App() {
         toLanguageCode?: string
     ) => {
         fetch(
-            `http://localhost:9000/translation/answer?incomingSentence=${incomingSentence}&fromLanguageCode=${fromLanguageCode}&toLanguageCode=${toLanguageCode}`
+            `http://localhost:9000/translation/translateText?incomingSentence=${incomingSentence}&fromLanguageCode=${fromLanguageCode}&toLanguageCode=${toLanguageCode}`
         )
             .then((res) => res.text())
             .then((translation) => {
