@@ -1,4 +1,4 @@
-import { FormEvent, useState, useEffect } from 'react';
+import { FormEvent, useState, useEffect, useRef } from 'react';
 import './App.css';
 import { TextField, Button, Autocomplete, Box } from '@mui/material';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
@@ -16,13 +16,26 @@ interface Language {
     name: string;
 }
 
+interface TranslateRequest {
+    incomingSentence: string | undefined;
+    fromLanguageCode: string | undefined;
+    toLanguageCode: string | undefined;
+}
+
 function App() {
+    const [loading, setLoading] = useState(false);
+
+    // Translation
     const [incomingSentence, setIncomingSentence] = useState<string>();
     const [fromLanguageCode, setFromLanguageCode] = useState<string>();
     const [toLanguageCode, setToLanguageCode] = useState<string>();
     const [translation, setTranslation] = useState<string>();
     const [languages, setLanguages] = useState<Language[]>([]);
-    const [loading, setLoading] = useState(false);
+
+    // Audio
+    const [audioUrl, setAudioUrl] = useState<string | null>(null);
+    const audioRef = useRef<HTMLAudioElement>(null);
+    const [ws, setWs] = useState<WebSocket | null>(null);
 
     const defaultPropsFromLanguage = {
         options: languages || [],
@@ -35,78 +48,91 @@ function App() {
     };
 
     useEffect(() => {
-        const languages = localStorage.getItem('cachedLanguages');
+        const fetchData = async () => {
+            const cachedLanguages = localStorage.getItem('cachedLanguages');
+            if (cachedLanguages) {
+                setLanguages(JSON.parse(cachedLanguages));
+            } else {
+                try {
+                    const response = await fetch(
+                        'http://localhost:9000/translation/languages'
+                    );
+                    if (response.ok) {
+                        const languagesData: Language[] = await response.json();
+                        setLanguages(languagesData);
+                        localStorage.setItem(
+                            'cachedLanguages',
+                            JSON.stringify(languagesData)
+                        );
+                    }
+                } catch (error) {
+                    console.error('Error fetching languages:', error);
+                }
+            }
+        };
 
-        if (languages) {
-            console.log('Fetch data from cache');
-            setSupportedLanguagesFromCache(languages);
-        } else {
-            console.log('Fetch data from API');
-            // Fetch data from API
-            setSupportedLanguagesFromAPI();
-        }
+        fetchData();
+
+        const ws = new WebSocket('ws://localhost:8000');
+
+        ws.onopen = () => {
+            console.log('WebSocket connected');
+            setWs(ws);
+        };
+
+        ws.onmessage = (event) => {
+            console.log('incoming websocket event: ', event);
+
+            const audioUrl = URL.createObjectURL(
+                new Blob([event.data], { type: 'audio/mp3' })
+            );
+
+            console.log('Audio URL: ', audioUrl);
+
+            setAudioUrl(audioUrl);
+        };
+
+        ws.onclose = () => {
+            console.log('WebSocket closed');
+            setWs(null);
+        };
+
+        return () => {
+            if (ws) {
+                ws.close();
+            }
+        };
     }, []);
 
-    useEffect(() => {}, [languages]);
+    useEffect(() => {
+        setAudioUrl(audioUrl);
+
+        if (audioUrl) {
+            const audioElement = new Audio(audioUrl);
+            audioElement.play();
+        }
+
+        setLoading(false);
+    }, [audioUrl]);
 
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
 
-        console.log(incomingSentence);
-
         if (incomingSentence) {
             setLoading(true);
 
-            callTranslateAPI(
+            const translateRequest: TranslateRequest = {
                 incomingSentence,
                 fromLanguageCode,
-                toLanguageCode
-            );
+                toLanguageCode,
+            };
+
+            if (ws) {
+                ws.send(JSON.stringify(translateRequest));
+            }
         } else {
             setTranslation('Sentence must be entered.');
         }
-
-        console.log(translation);
-    };
-
-    const setSupportedLanguagesFromCache = (cachedLanguages: string) => {
-        setLanguages(JSON.parse(cachedLanguages));
-
-        setLoading(false);
-    };
-
-    const setSupportedLanguagesFromAPI = () => {
-        fetch(`http://localhost:9000/translation/languages`)
-            .then((res) => res.json())
-            .then((languages: Language[]) => {
-                console.log('Languages: ', languages);
-
-                // Cache the result in localStorage
-                localStorage.setItem(
-                    'cachedLanguages',
-                    JSON.stringify(languages)
-                );
-
-                setLanguages(languages);
-
-                setLoading(false);
-            });
-    };
-
-    const callTranslateAPI = (
-        incomingSentence: string,
-        fromLanguageCode?: string,
-        toLanguageCode?: string
-    ) => {
-        fetch(
-            `http://localhost:9000/translation/translateText?incomingSentence=${incomingSentence}&fromLanguageCode=${fromLanguageCode}&toLanguageCode=${toLanguageCode}`
-        )
-            .then((res) => res.text())
-            .then((translation) => {
-                setLoading(false);
-
-                return setTranslation(translation);
-            });
     };
 
     return (
@@ -114,11 +140,7 @@ function App() {
             <CssBaseline />
             <div className="App">
                 <header className="App-header">
-                    <form
-                        onSubmit={(e) => {
-                            handleSubmit(e);
-                        }}
-                    >
+                    <form onSubmit={handleSubmit}>
                         <Box
                             sx={{
                                 display: 'flex',
@@ -208,6 +230,22 @@ function App() {
                                         }}
                                     >
                                         {translation}
+                                    </p>
+                                    <p>
+                                        {audioUrl && (
+                                            <audio
+                                                ref={audioRef}
+                                                controls
+                                                autoPlay
+                                            >
+                                                <source
+                                                    src={audioUrl}
+                                                    type="audio/mp3"
+                                                />
+                                                Your browser does not support
+                                                the audio element.
+                                            </audio>
+                                        )}
                                     </p>
                                 </>
                             )}
