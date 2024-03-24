@@ -1,9 +1,19 @@
 import { FormEvent, useState, useEffect, useRef } from 'react';
 import './App.css';
-import { TextField, Button, Autocomplete, Box } from '@mui/material';
+import {
+    TextField,
+    Button,
+    Autocomplete,
+    Box,
+    ToggleButtonGroup,
+    ToggleButton,
+} from '@mui/material';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { TextareaAutosize as BaseTextareaAutosize } from '@mui/base/TextareaAutosize';
+import { styled } from '@mui/system';
 import CssBaseline from '@mui/material/CssBaseline';
 import CircularProgress from '@mui/material/CircularProgress';
+import React from 'react';
 
 const darkTheme = createTheme({
     palette: {
@@ -11,19 +21,79 @@ const darkTheme = createTheme({
     },
 });
 
+const blue = {
+    100: '#DAECFF',
+    200: '#b6daff',
+    400: '#3399FF',
+    500: '#007FFF',
+    600: '#0072E5',
+    900: '#003A75',
+};
+
+const grey = {
+    50: '#F3F6F9',
+    100: '#E5EAF2',
+    200: '#DAE2ED',
+    300: '#C7D0DD',
+    400: '#B0B8C4',
+    500: '#9DA8B7',
+    600: '#6B7A90',
+    700: '#434D5B',
+    800: '#303740',
+    900: '#1C2025',
+};
+
+const Textarea = styled(BaseTextareaAutosize)(
+    ({ theme }) => `
+    box-sizing: border-box;
+    width: 320px;
+    font-family: 'Arial';
+    font-size: 16px;
+    font-weight: 400;
+    line-height: 1.5;
+    padding: 8px 12px;
+    border-radius: 8px;
+    color: ${theme.palette.mode === 'dark' ? grey[100] : grey[900]};
+    background: ${theme.palette.mode === 'dark' ? grey[800] : '#fff'};
+    border: 1px solid ${theme.palette.mode === 'dark' ? grey[700] : grey[200]};
+    box-shadow: 0px 2px 2px ${
+        theme.palette.mode === 'dark' ? grey[900] : grey[50]
+    };
+
+    &:hover {
+      border-color: ${blue[400]};
+    }
+
+    &:focus {
+      border-color: ${blue[400]};
+      box-shadow: 0 0 0 3px ${
+          theme.palette.mode === 'dark' ? blue[200] : blue[200]
+      };
+    }
+
+    // firefox
+    &:focus-visible {
+      outline: 0;
+    }
+  `
+);
+
 interface Language {
     code: string;
     name: string;
 }
 
-interface TranslateRequest {
-    incomingSentence: string | undefined;
+interface TranslationRequest {
+    inputMode: 'speech' | 'text';
+    incomingSentence?: string | undefined;
+    incomingSpeech?: string | undefined;
     fromLanguageCode: string | undefined;
     toLanguageCode: string | undefined;
 }
 
 function App() {
     const [loading, setLoading] = useState(false);
+    const [ws, setWs] = useState<WebSocket | null>(null);
 
     // Translation
     const [incomingSentence, setIncomingSentence] = useState<string>();
@@ -31,11 +101,14 @@ function App() {
     const [toLanguageCode, setToLanguageCode] = useState<string>();
     const [translation, setTranslation] = useState<string>();
     const [languages, setLanguages] = useState<Language[]>([]);
-
     // Audio
+    // incoming speech response
     const [audioUrl, setAudioUrl] = useState<string | null>(null);
     const audioRef = useRef<HTMLAudioElement>(null);
-    const [ws, setWs] = useState<WebSocket | null>(null);
+    // listening to user speech to stream
+    const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
+
+    const [alignment, setAlignment] = React.useState('web');
 
     const defaultPropsFromLanguage = {
         options: languages || [],
@@ -47,7 +120,15 @@ function App() {
         getOptionLabel: (option: Language) => option.name,
     };
 
+    const handleChange = (
+        event: React.MouseEvent<HTMLElement>,
+        newAlignment: string
+    ) => {
+        setAlignment(newAlignment);
+    };
+
     useEffect(() => {
+        // Function to get available languages and initialize websocket
         const fetchData = async () => {
             const cachedLanguages = localStorage.getItem('cachedLanguages');
             if (cachedLanguages) {
@@ -104,7 +185,66 @@ function App() {
         };
     }, []);
 
+    // useEffect(() => {
+    //     // Function to initialize microphone access and set up audio stream
+    //     const initializeMicrophone = async () => {
+    //         try {
+    //             const stream = await navigator.mediaDevices.getUserMedia({
+    //                 audio: true,
+    //             });
+    //             setAudioStream(stream);
+    //         } catch (error) {
+    //             console.error('Error accessing microphone:', error);
+    //         }
+    //     };
+
+    //     initializeMicrophone();
+
+    //     // Clean-up function to stop audio stream when component unmounts
+    //     return () => {
+    //         if (audioStream) {
+    //             audioStream.getTracks().forEach((track) => track.stop());
+    //         }
+    //     };
+    // }, []);
+
+    // useEffect(() => {
+    //     // Function to send raw audio data to server via WebSocket
+    //     const sendDataToServer = () => {
+    //         if (ws && audioStream) {
+    //             const audioChunks: Blob[] = [];
+    //             const mediaRecorder = new MediaRecorder(audioStream);
+
+    //             mediaRecorder.ondataavailable = (e) => {
+    //                 if (e.data.size > 0) {
+    //                     audioChunks.push(e.data);
+    //                 }
+    //             };
+
+    //             mediaRecorder.onstop = () => {
+    //                 const audioBlob = new Blob(audioChunks, {
+    //                     type: 'audio/wav',
+    //                 });
+    //                 ws.send(audioBlob);
+    //                 setLoading(false);
+    //             };
+
+    //             mediaRecorder.start();
+    //         }
+    //     };
+
+    //     sendDataToServer();
+
+    //     // Clean-up function to stop sending data when component unmounts
+    //     return () => {
+    //         if (audioStream) {
+    //             audioStream.getTracks().forEach((track) => track.stop());
+    //         }
+    //     };
+    // }, [ws, audioStream]);
+
     useEffect(() => {
+        // Function to play the translated speech response
         setAudioUrl(audioUrl);
 
         if (audioUrl) {
@@ -121,7 +261,8 @@ function App() {
         if (incomingSentence) {
             setLoading(true);
 
-            const translateRequest: TranslateRequest = {
+            const translateRequest: TranslationRequest = {
+                inputMode: 'text',
                 incomingSentence,
                 fromLanguageCode,
                 toLanguageCode,
@@ -149,9 +290,7 @@ function App() {
                                 marginTop: 10,
                             }}
                         >
-                            <div>
-                                Select languages and enter text to translate.
-                            </div>
+                            <div>Select languages</div>
                             <Box
                                 sx={{
                                     display: 'flex',
@@ -192,13 +331,32 @@ function App() {
                                     }}
                                 />
                             </Box>
-                            <TextField
-                                variant="standard"
-                                label="Sentence to translate..."
+                            <ToggleButtonGroup
+                                color="primary"
+                                style={{
+                                    marginTop: '60px',
+                                    marginLeft: '50px',
+                                }}
+                                value={alignment}
+                                exclusive
+                                onChange={handleChange}
+                                aria-label="Platform"
+                            >
+                                <ToggleButton value="web">
+                                    Speak to translate
+                                </ToggleButton>
+                                <ToggleButton value="android">
+                                    Type text to translate
+                                </ToggleButton>
+                            </ToggleButtonGroup>
+                            <Textarea
+                                aria-label="minimum height"
+                                minRows={3}
+                                placeholder="Sentence to translate..."
                                 style={{
                                     height: 30,
                                     width: 500,
-                                    marginTop: 40,
+                                    marginTop: 80,
                                 }}
                                 onChange={(e) =>
                                     setIncomingSentence(e.target.value)
